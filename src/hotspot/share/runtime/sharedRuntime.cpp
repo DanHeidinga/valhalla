@@ -2799,10 +2799,19 @@ AdapterHandlerEntry* AdapterHandlerLibrary::get_simple_adapter(const methodHandl
 }
 
 CompiledEntrySignature::CompiledEntrySignature(Method* method) :
-  _method(method), _num_inline_args(0), _has_inline_recv(false),
-  _regs(nullptr), _regs_cc(nullptr), _regs_cc_ro(nullptr),
-  _args_on_stack(0), _args_on_stack_cc(0), _args_on_stack_cc_ro(0),
-  _c1_needs_stack_repair(false), _c2_needs_stack_repair(false), _supers(nullptr) {
+  _method(method),
+  _num_inline_args(0),
+  _has_inline_recv(false),
+  _has_scalarized_return(false),
+  _regs(nullptr),
+  _regs_cc(nullptr),
+  _regs_cc_ro(nullptr),
+  _args_on_stack(0),
+  _args_on_stack_cc(0),
+  _args_on_stack_cc_ro(0),
+  _c1_needs_stack_repair(false),
+  _c2_needs_stack_repair(false),
+  _supers(nullptr) {
   _sig = new GrowableArray<SigEntry>((method != nullptr) ? method->size_of_parameters() : 1);
   _sig_cc = new GrowableArray<SigEntry>((method != nullptr) ? method->size_of_parameters() : 1);
   _sig_cc_ro = new GrowableArray<SigEntry>((method != nullptr) ? method->size_of_parameters() : 1);
@@ -2912,7 +2921,8 @@ void CompiledEntrySignature::compute_calling_conventions(bool init) {
       SigEntry::add_entry(_sig_cc_ro, T_OBJECT, holder->name());
       arg_num++;
     }
-    for (SignatureStream ss(_method->signature()); !ss.at_return_type(); ss.next()) {
+    SignatureStream ss(_method->signature());
+    for (; !ss.at_return_type(); ss.next()) {
       BasicType bt = ss.type();
       if (bt == T_OBJECT) {
         InlineKlass* vk = ss.as_inline_klass(holder);
@@ -2991,6 +3001,12 @@ void CompiledEntrySignature::compute_calling_conventions(bool init) {
       SigEntry::add_entry(_sig, bt, ss.as_symbol());
       if (bt != T_VOID) {
         arg_num++;
+      }
+    }
+    assert(ss.at_return_type(), "must be at return type");
+    if (InlineTypeReturnedAsFields) {
+      if (nullptr != ss.as_inline_klass(holder)) {
+        _has_scalarized_return = true;
       }
     }
   }
@@ -3209,6 +3225,9 @@ AdapterHandlerEntry* AdapterHandlerLibrary::get_adapter(const methodHandle& meth
   // Fast-path for trivial adapters
   AdapterHandlerEntry* entry = get_simple_adapter(method);
   if (entry != nullptr) {
+    if (InlineTypeReturnedAsFields && !method->has_scalarized_return() && method->returns_inline_type()) {
+      method->set_has_scalarized_return();
+    }
     return entry;
   }
 
@@ -3227,6 +3246,9 @@ AdapterHandlerEntry* AdapterHandlerLibrary::get_adapter(const methodHandle& meth
     if (ces.c2_needs_stack_repair() && !method->c2_needs_stack_repair()) {
       method->set_c2_needs_stack_repair();
     }
+  }
+  if (ces.has_scalarized_return()) {
+    method->set_has_scalarized_return();
   }
 
   {

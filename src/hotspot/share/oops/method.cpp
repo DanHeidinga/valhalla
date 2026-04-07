@@ -1315,23 +1315,18 @@ void Method::link_method(const methodHandle& h_method, TRAPS) {
   }
   assert( _code == nullptr, "nothing compiled yet" );
 
-  // Setup interpreter entrypoint
   assert(this == h_method(), "wrong h_method()" );
 
   assert(adapter() == nullptr || adapter()->is_linked(), "init'd to null or restored from cache");
-  address entry = Interpreter::entry_for_method(h_method);
-  assert(entry != nullptr, "interpreter entry must be non-null");
-  // Sets both _i2i_entry and _from_interpreted_entry
-  set_interpreter_entry(entry);
 
   // Don't overwrite already registered native entries.
   if (is_native() && !has_native_function()) {
     set_native_function(
       SharedRuntime::native_method_throw_unsatisfied_link_error_entry(),
       !native_bind_event_is_interesting);
-  }
-  if (InlineTypeReturnedAsFields && returns_inline_type() && !has_scalarized_return()) {
-    set_has_scalarized_return();
+      if (InlineTypeReturnedAsFields && !has_scalarized_return() && returns_inline_type()) {
+        set_has_scalarized_return();
+      }
   }
 
   // Setup compiler entrypoint.  This is made eagerly, so we do not need
@@ -1347,6 +1342,9 @@ void Method::link_method(const methodHandle& h_method, TRAPS) {
     h_method->_from_compiled_entry = wrong_method_abstract;
     h_method->_from_compiled_inline_entry = wrong_method_abstract;
     h_method->_from_compiled_inline_ro_entry = wrong_method_abstract;
+    if (InlineTypeReturnedAsFields && !has_scalarized_return() && returns_inline_type()) {
+      set_has_scalarized_return();
+    }
   } else if (_adapter == nullptr) {
     (void) make_adapters(h_method, CHECK);
 #ifndef ZERO
@@ -1358,6 +1356,14 @@ void Method::link_method(const methodHandle& h_method, TRAPS) {
   }
 
   // ONLY USE the h_method now as make_adapter may have blocked
+
+  // Setup interpreter entrypoint
+  // Do this after finding the adapter as that sets the `has_scalarized_return` state
+  // used by the entry_for_method to determine the MethodKind
+  address entry = Interpreter::entry_for_method(h_method); // Uses the has_scalarized_return() result
+  assert(entry != nullptr, "interpreter entry must be non-null");
+  // Sets both _i2i_entry and _from_interpreted_entry
+  h_method->set_interpreter_entry(entry);
 
   if (h_method->is_continuation_native_intrinsic()) {
     _from_interpreted_entry = nullptr;

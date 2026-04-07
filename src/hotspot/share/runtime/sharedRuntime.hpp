@@ -941,6 +941,7 @@ class CompiledEntrySignature : public StackObj {
   Method* _method;
   int  _num_inline_args;
   bool _has_inline_recv;
+  bool _has_scalarized_return;
   GrowableArray<SigEntry>* _sig;
   GrowableArray<SigEntry>* _sig_cc;
   GrowableArray<SigEntry>* _sig_cc_ro;
@@ -979,6 +980,7 @@ public:
 
   int  num_inline_args()               const { return _num_inline_args; }
   bool has_inline_recv()               const { return _has_inline_recv; }
+  bool has_scalarized_return()         const { return _has_scalarized_return; }
 
   bool has_scalarized_args()           const { return _sig != _sig_cc; }
   bool c1_needs_stack_repair()         const { return _c1_needs_stack_repair; }
